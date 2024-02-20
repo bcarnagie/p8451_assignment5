@@ -1,7 +1,142 @@
 ---
 title: "assignment 5"
 date: "2024-02-14"
-output: html_document
+output: word_document
 ---
 
-test!
+Instructions for Assignment
+
+Goal: You want to predict current alcohol consumption but it is expensive and time-consuming to administer all of the behavioral testing that produces the personality scores. You will conduct a reproducible analysis to build and test classification models using regularized logistic regression and traditional logistic regression. You will produce a shareable report that includes code, results and answers to questions using R Markdown.
+
+Address the following:
+
+You should create and compare three different models listed below :
+A model that chooses alpha and lambda via cross-validation using all of the features in the dataset
+A model that uses all the features in the dataset and traditional logistic regression. This can also be learned using cross-validation, even though there are no hyperparameters
+A lasso model using all of the features in the dataset, tuning the hyperparameter using cross-validation.
+Decide which model you would choose as your final model. Provide justification for your choice. (1-2 sentences. no more!)
+Apply your final model in the test set and report your final evaluation metrics. 
+What research questions could this analysis either a) directly address or b) indirectly help to address by providing information that could be used in subsequent analyses? Limit this response to no more than 1 paragraph. Be sure to use complete sentences.
+Remember to remove the ID variable as you do not want to include that in your analysis. Remember to use 123 as your random seed.
+
+### Load needed libraries
+```{r}
+library(tidyverse) 
+library(dplyr)
+library(forcats)
+library(caret)
+library(glmnet)
+library(klaR)
+library(pROC)
+
+
+alcohol_df = read_csv("./alcohol_use.csv") |> janitor::clean_names() 
+
+alcohol_df <- alcohol_df[, -1]
+
+#tidyverse way to create data partition
+train.indices <- alcohol_df %>%
+  pull(alc_consumption) %>%
+  createDataPartition(p = 0.7, list = FALSE)
+
+train.data <- alcohol_df %>%
+  slice(train.indices)
+
+test.data <- alcohol_df %>%
+  slice(-train.indices)
+
+```
+
+
+## Question 1 
+
+### Part A
+```{r}
+set.seed(123)
+
+en.model<- train(
+                  alc_consumption ~., 
+                  data = train.data, 
+                  method = "glmnet",
+                  trControl = trainControl("cv", number = 10), 
+                  preProc=c("center", "scale"),
+                  tuneLength=10
+                )
+
+#Print the values of alpha and lambda that gave best prediction
+en.model$bestTune
+
+#Print all of the options examined
+en.model$results
+
+# Model coefficients
+coef(en.model$finalModel, en.model$bestTune$lambda)
+
+# Make predictions in test set
+
+en.pred <- en.model %>% 
+              predict(test.data)
+
+# Model prediction performance
+postResample(en.pred,test.data$alc_consumption)
+
+
+# Calculate predicted probabilities for the test set
+en.pred_prob <- en.model %>%
+  predict(test.data, type = "prob")
+
+# Extract predicted probabilities for the positive class
+en.pred_prob_positive <- en.pred_prob[, "CurrentUse"]
+
+# Calculate AUC
+auc <- roc(test.data$alc_consumption, en.pred_prob_positive)
+
+
+```
+Area under the curve: 0.8755
+
+### Part B 
+```{r}
+glm_model <- train(
+  alc_consumption ~ .,
+  data = train.data,
+  method = "glm",
+  trControl = trainControl("cv", number = 10),
+  preProc = c("center", "scale")
+)
+
+print(glm_model)
+
+glm_pred <- predict(glm_model, newdata = test.data)
+
+postResample(glm_pred, test.data$alc_consumption)
+```
+### Part C 
+```{r}
+lasso_model <- train(
+  alc_consumption ~ .,
+  data = train.data,
+  method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  preProc = c("center", "scale"),
+  tuneGrid = expand.grid(alpha = 1, lambda = seq(0.001, 0.1, length.out = 100))
+)
+
+# Print the model summary
+print(lasso_model)
+
+# Make predictions in the test set
+lasso_pred <- predict(lasso_model, newdata = test.data)
+
+# Model prediction performance
+postResample(lasso_pred, test.data$alc_consumption)
+```
+
+### Question 2
+
+
+### Question 3
+
+
+
+### Question 4
